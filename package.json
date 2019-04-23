@@ -1,0 +1,22 @@
+{
+  "name": "tilt",
+  "version": "1.0.0",
+  "description": "A NodeJS client for the Tilt Hydrometer",
+  "keywords": ["tilt", "beer", "hydrometer", "alcohol"],
+  "main": "tilt.js",
+  "author": "Sven Gutperl <s.gutperl@tu-bs.de>",
+  "contributors": [
+    "Albert Emil <albert.emil@posteo.co.uk>",
+    "Natalie Schwerdtfeger <n.schwerdtfeger@tu-bs.de>"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlbertEmil/tilt.git"
+  },  
+  "dependencies": {
+    "bleacon": "^0.5.1",
+    "influx": "^5.0.7",
+    "onoff": "^3.2.7"
+  }
+}

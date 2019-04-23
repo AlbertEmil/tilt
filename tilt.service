@@ -1,0 +1,22 @@
+[Unit]
+Description=NodeJS client for Tilt Hydrometer
+AssertPathExists=/home/pi/tilt
+# TODO: Dependency management/handling
+# /lib/systemd/system/influxdb.service
+# Requires=influxdb.service
+# After=influxdb.service
+
+[Service]
+WorkingDirectory=/home/pi/tilt/
+ExecStart=/usr/bin/node /home/pi/tilt/tilt.js
+Restart=always
+RestartSec=5
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=tilt-client
+User=pi
+Group=pi
+# Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
