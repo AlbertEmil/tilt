@@ -11,9 +11,11 @@ WorkingDirectory=/home/pi/tilt/
 ExecStart=/usr/bin/node /home/pi/tilt/tilt.js
 Restart=always
 RestartSec=5
+StartLimitBurst=3
+StartLimitInterval=20
 StandardOutput=syslog
 StandardError=syslog
-SyslogIdentifier=tilt-client
+SyslogIdentifier=tilt-nodejs-client
 User=pi
 Group=pi
 # Environment=NODE_ENV=production
