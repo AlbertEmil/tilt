@@ -3,8 +3,11 @@
 let config = {};
 
 config.BUTTON_PIN = 24;
-config.LED_PIN = 27;
 config.BUTTON_DEBOUNCE_MS = 100;
+
+config.LED_PIN = 27;
+config.LED_BLINK_INTERVAL_MS = 200;
+config.LED_BLINK_DURATION_MS = 2400;
 
 config.TILT_RED_UUID = "a495bb10c5b14b44b5121370f02d74de";
 config.DATABASE_HOST = 'localhost';

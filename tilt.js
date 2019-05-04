@@ -61,7 +61,7 @@ const queryLastStartTime = async () => {
 }
 
 
-const querySpecificGravityAtTime = async (timestamp) => {
+const querySpecificGravity = async (timestamp) => {
   // TODO: Fix duplicate if-else clauses for return statements (scope issues)
   if (timestamp)
   {
@@ -119,7 +119,7 @@ const ledOff = () => led.writeSync(0)
 
 
 // (https://github.com/fivdi/onoff#blink-an-led-using-the-synchronous-api)
-const ledBlink = (interval=200, duration=1200) => {
+const ledBlink = (interval=config.LED_BLINK_INTERVAL_MS, duration=config.LED_BLINK_DURATION_MS) => {
   const blinkInterval = setInterval(() => {
     led.writeSync(led.readSync() === 0 ? 1 : 0);
   }, interval)
@@ -136,14 +136,14 @@ const setInitialLedStatus = async () => {
   console.log(`isFermentationRunning: ${isFermentationRunning}`)
   if (!isFermentationRunning) return false;
 
-  const lastStartTime = await queryLastStartTime()
-  console.log(`lastStartTime: ${lastStartTime}`)
-  if (!lastStartTime) return false;
+  const startTime = await queryLastStartTime()
+  console.log(`lastStartTime: ${startTime}`)
+  if (!startTime) return false;
 
-  const specificGravityAtLastStart = await querySpecificGravityAtTime(lastStartTime)
-  console.log(`specificGravityAtLastStart: ${specificGravityAtLastStart}`)
-  if (!specificGravityAtLastStart) return false;
-  specificGravityAtStart = specificGravityAtLastStart;
+  const specificGravity = await querySpecificGravity(lastStartTime)
+  console.log(`specificGravity: ${specificGravity}`)
+  if (!specificGravity) return false;
+  specificGravityAtStart = specificGravity;
 
   ledOn();
 }
@@ -210,20 +210,31 @@ const setInitialLedStatus = async () => {
     const buttonEvent = createButtonEvent(isFermentationRunning)
     console.log(`buttonEvent: ${buttonEvent.title}`)
 
-    const specificGravity = await querySpecificGravityAtTime()
+    const specificGravity = await querySpecificGravity()
     console.log(`specificGravity: ${specificGravity}`)
 
-    if (!isFermentationRunning && !specificGravity)
+    if (isFermentationRunning)
     {
-      console.log('unable to start fermentation')
-      ledBlink();
+      // fermentation should be stopped
+      influxHandler.writeEvent(buttonEvent);
+      ledOff();
     }
     else
     {
-      influxHandler.writeEvent(buttonEvent);
-      (!isFermentationRunning ? ledOn() : ledOff());
+      // fermentation should be started
+      if (specificGravity)
+      {
+        // start fermentation if specificGravity is valid
+        specificGravityAtStart = specificGravity;
+        influxHandler.writeEvent(buttonEvent);
+        ledOn();
+      }
+      else {
+        // unable to start fermentation due to invalid specificGravity
+        console.log('Unable to start fermentation');
+        ledBlink();
+      }
     }
-
   })
 
 
