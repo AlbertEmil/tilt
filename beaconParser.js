@@ -1,5 +1,6 @@
 "use strict";
 
+// TODO: Import Bleacon package/module here ?
 
 module.exports.temperatureCelsius = (bleacon) => {
   return (bleacon.major - 32) / 1.8;

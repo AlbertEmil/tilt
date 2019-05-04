@@ -2,229 +2,101 @@
 
 const Bleacon = require('bleacon');
 const Gpio = require('onoff').Gpio;
-const Influx = require('influx');
 
 const config = require('./config');
+// TODO: Merge beaconParser and calculations since they depent on each other
+const tiltParser = require('./beaconParser');
 const calc = require('./calculations');
-const tiltParser = require('./tiltParser');
+const influxHandler = require('./influxHandler');
 
+// TODO: Summarize/refactor all GPIO related calls in own module ?
+const button = new Gpio(config.BUTTON_PIN, 'in', 'rising', { debounceTimeout: config.BUTTON_DEBOUNCE_MS });
+const led = new Gpio(config.LED_PIN, 'out');
 
-const button = new Gpio(24, 'in', 'rising', {debounceTimeout: 100});
-const led = new Gpio(27, 'out');
 
 let specificGravityAtStart = null;
+// TODO: Remove after influx queries are fully merged to influxHandler
+const influx = influxHandler.influx;
 
 
-// create InfluxDB connector
-const influx = new Influx.InfluxDB({
-  host: config.DATABASE_HOST,
-  database: config.DATABASE_NAME,
-  schema: [{
-    measurement: 'tilt_red',
-    fields: {
-      value: Influx.FieldType.FLOAT,
-    },
-    tags: [
-      'unit',
-      'measured_variable',
-    ]
-  },
-  {
-    measurement: 'events',
-    fields: {
-      title: Influx.FieldType.STRING,
-      text: Influx.FieldType.STRING,
-      tags: Influx.FieldType.STRING,
-    },
-    tags: []
-  }]
-})
-
-
-// check if database name exists
-influx.getDatabaseNames()
-  .then(names => {
-    if (!names.includes(config.DATABASE_NAME)) {
-      return influx.createDatabase(config.DATABASE_NAME);
-    }
-  })
-
-
-// helper function to create data array written to InfluxDB from a single measurment reading
-const createMeasurementArray = (singleReading) => {
-  return {
-    fields: {
-      value: singleReading.value,
-    },
-    tags: {
-      unit: singleReading.unit,
-      measured_variable: singleReading.variable,
-    }
+const prepareDatabase = async () => {
+  const databaseNames = await influx.getDatabaseNames()
+  if (!databaseNames.includes(config.DATABASE_NAME)) {
+    influx.createDatabase(config.DATABASE_NAME)
   }
 }
 
 
-// query InfluxDB for events and decide whether a fermentation is currently running
-const isFermentationRunning = () => {
-  return influx.query(`
+const queryIsFermentationRunning = async () => {
+  const foundRows = await influx.query(`
     SELECT * FROM events
     ORDER BY time DESC
     LIMIT 1
   `)
-  .then(rows => {
-    if (rows[0]) {
-      const timestamp = rows[0].time.getNanoTime();
-      return (rows[0].tags.split(',').includes("start") ? true : false);
+
+  if (foundRows[0]) {
+    const timestamp = foundRows[0].time.getNanoTime();
+    return (foundRows[0].tags.split(',').includes("start") ? true : false);
+  }
+  else {
+    return false;
+  }
+}
+
+
+const queryLastStartTime = async () => {
+  const foundRows = await influx.query(`
+    SELECT time,tags FROM events
+    WHERE tags =~ /start/
+    ORDER BY time DESC
+    LIMIT 1
+  `)
+
+  if (foundRows[0]) {
+    return (foundRows[0].time.getNanoTime());
+  }
+  else {
+    return false;
+  }
+}
+
+
+const querySpecificGravityAtTime = async (timestamp) => {
+  // TODO: Fix duplicate if-else clauses for return statements (scope issues)
+  if (timestamp)
+  {
+    const foundRows = await influx.query(`
+      SELECT value FROM tilt_red
+      WHERE measured_variable='specific_gravity'
+      AND time <= ${timestamp}
+      ORDER BY time DESC
+      LIMIT 1
+    `)
+    if (foundRows[0]) {
+      return (foundRows[0].value);
     }
     else {
       return false;
     }
-  })
-}
-
-
-// query InfluxDB for lasst fermentations start time
-const queryLastStartTime = () => {
-  return influx.query(`
-    SELECT time,tags FROM events
-    WHERE tags =~ /start/ 
-    ORDER BY time DESC
-    LIMIT 1
-  `)
-  .then(rows => {
-    return rows[0].time.getNanoTime();
-  })
-}
-
-
-// query InfluxDB for original specific gravity
-const querySpecificGravityAtStart = () => {
-  return queryLastStartTime()
-  .then(timestamp => {
-      return influx.query(`
-          SELECT value FROM tilt_red
-          WHERE measured_variable='specific_gravity'
-          AND time <= ${timestamp}
-          ORDER BY time DESC
-          LIMIT 1
-      `)
-  })
-  .then(rows => {
-      // console.log(rows);
-      return Promise ((resolve, reject) => {
-          if (rows[0].value)
-          {
-              resolve(rows[0].value)
-          }
-          else
-          {
-              reject('No value for specificGravityAtStart found.')
-          }
-
-      })
-  })
-  // .catch(err => {
-  //     console.log('Caught error');
-  //     console.log(err);
-  // })    
-}
-
-
-// read and set value for original specific gravity which is needed for alcohol calculations
-const setSpecificGravityAtStart = () => {
-  return querySpecificGravityAtStart()
-    .then(val => {
-      specificGravityAtStart = val;
-      console.log(specificGravityAtStart);
-      // return val;
-      return Promise((resolve, reject) => {
-        resolve(val)
-      })
-    })
-}
-
-
-// write measured data to the InfluxDB instance
-const writeDataToInfluxDb = (data, measurementName) => {
-  return influx.writeMeasurement(
-    measurementName,
-    data.map(x => createMeasurementArray(x))
-  )
-}
-
-
-// https://maxchadwick.xyz/blog/grafana-influxdb-annotations
-const writeEventToInfluxDb = (event) => {
-  console.log(event)
-  return influx.writeMeasurement(
-    'events',
-    [{
-      fields: {
-        title: event.title,
-        text: event.text,
-        tags: event.tags.join(','),
-      },
-    }]
-  )
-}
-
-
-// check if a fermentation is running on start-up
-isFermentationRunning()
-.then(isRunning => {
-  console.log(`Fermentation is ${(isRunning ? '' : 'not ')}running`);
-  switchLedForFermentationStatus(isRunning);
-  if (isRunning) {
-    setSpecificGravityAtStart();
   }
-})
-
-
-// start scanning for bleacons
-Bleacon.startScanning()
-
-
-// listen for bleacon messages
-Bleacon.on('discover', function (bleacon) {
-  if (bleacon.uuid == config.TILT_RED_UUID) {
-    const specificGravity = tiltParser.specificGravity(bleacon);
-    const alcoholByVolume = calc.alcoholByVolume(specificGravity);
-    const alcoholByMass = calc.alcoholByMass(alcoholByVolume);
-
-    console.log(specificGravityAtStart, specificGravity, alcoholByVolume, alcoholByMass);
-
-    const data = [
-      {
-        variable: 'temperature',
-        value: tiltParser.temperatureCelsius(bleacon),
-        unit: '°C',
-      },
-      {
-        variable: 'specific_gravity',
-        value: specificGravity,
-        unit: '-',
-      },
-      {
-        variable: 'alcohol_by_volume',
-        value: alcoholByVolume,
-        unit: 'vol.-%',
-      },
-      {
-        variable: 'alcohol_by_mass',
-        value: alcoholByMass,
-        unit: 'wt.-%',
-      }
-    ]
-    // console.log(data);
-    writeDataToInfluxDb(data, 'tilt_red')
-      .catch(err => {
-        console.log(err)
-      })
+  else
+  {
+    const foundRows = await influx.query(`
+      SELECT value FROM tilt_red
+      WHERE measured_variable='specific_gravity'
+      ORDER BY time DESC
+      LIMIT 1
+    `)
+    if (foundRows[0]) {
+      return (foundRows[0].value);
+    }
+    else {
+      return false;
+    }
   }
-})
+}
 
-
-// create button event depending on fermentation status
+// TODO: Refactor this function to other module ?
 const createButtonEvent = (isRunning) => {
   const startEvent = {
     title: "Fermentation started",
@@ -240,70 +112,125 @@ const createButtonEvent = (isRunning) => {
 }
 
 
-// switch LED on/off if fermentation is running
-const switchLedForFermentationStatus = (isRunning) => { (isRunning ? led.writeSync(1) : led.writeSync(0))}
+const ledOn = () => led.writeSync(1)
 
 
-// blink LED (https://github.com/fivdi/onoff#blink-an-led-using-the-synchronous-api)
-const blinkLed = (interval=200, duration=1200) => {
+const ledOff = () => led.writeSync(0)
+
+
+// (https://github.com/fivdi/onoff#blink-an-led-using-the-synchronous-api)
+const ledBlink = (interval=200, duration=1200) => {
   const blinkInterval = setInterval(() => {
     led.writeSync(led.readSync() === 0 ? 1 : 0);
   }, interval)
 
   setTimeout(() => {
     clearInterval(blinkInterval);
-    led.writeSync(0);
+    ledOff();
   }, duration);
 }
 
 
-// detect button presses
-button.watch((err, value) => {
-  if (err) {
-    console.log(err);
-    //   throw err;
-  }
+const setInitialLedStatus = async () => {
+  const isFermentationRunning = await queryIsFermentationRunning()
+  console.log(`isFermentationRunning: ${isFermentationRunning}`)
+  if (!isFermentationRunning) return false;
 
-  isFermentationRunning()
-  // .then(isRunning => {
-  //     writeEventToInfluxDb( createButtonEvent(isRunning) )
-  //     .then( result => {
-  //         // use inverted `isRunning` since this is 'old' status
-  //         if (!isRunning) { setSpecificGravityAtStart() }
-  //         switchLedForFermentationStatus(!isRunning);
-  //     })
-  // })
+  const lastStartTime = await queryLastStartTime()
+  console.log(`lastStartTime: ${lastStartTime}`)
+  if (!lastStartTime) return false;
 
-  .then(isRunning => {
-    console.log(`isRunning: ${isRunning}`)
-    // return writeEventToInfluxDb( createButtonEvent(isRunning) )
-    // TODO: Write event only if start/stop event is valid
-    writeEventToInfluxDb(createButtonEvent(isRunning))
-    // })
-    // .then( result => {
-    // use inverted `isRunning` since this is 'old' status
-    // console.log(`result: ${result}`)
-    if (!isRunning) { return setSpecificGravityAtStart() }
+  const specificGravityAtLastStart = await querySpecificGravityAtTime(lastStartTime)
+  console.log(`specificGravityAtLastStart: ${specificGravityAtLastStart}`)
+  if (!specificGravityAtLastStart) return false;
+  specificGravityAtStart = specificGravityAtLastStart;
+
+  ledOn();
+}
+
+
+(async () => {
+  console.log('Tilt client started');
+  prepareDatabase();
+  setInitialLedStatus();
+  Bleacon.startScanning()
+
+
+  Bleacon.on('discover', function (bleacon) {
+    if (bleacon.uuid == config.TILT_RED_UUID) {
+      const timestamp = Date.now()
+      const temperature = tiltParser.temperatureCelsius(bleacon)
+      const specificGravity = tiltParser.specificGravity(bleacon);
+      const alcoholByVolume = calc.alcoholByVolume(specificGravityAtStart, specificGravity);
+      const alcoholByMass = calc.alcoholByMass(alcoholByVolume);
+
+      const data = [
+        {
+          variable: 'temperature',
+          value: temperature,
+          unit: '°C',
+        },
+        {
+          variable: 'specific_gravity',
+          value: specificGravity,
+          unit: '-',
+        },
+        {
+          variable: 'alcohol_by_volume',
+          value: alcoholByVolume,
+          unit: 'vol.-%',
+        },
+        {
+          variable: 'alcohol_by_mass',
+          value: alcoholByMass,
+          unit: 'wt.-%',
+        }
+      ]
+
+      const filteredData = data.filter(x => x.value !== null)
+      console.log('Got data')
+      // console.log(filteredData)
+
+      influxHandler.writeData(filteredData);
+
+    }
   })
-  .then(val => {
-    console.log(`val: ${val}`)
-    switchLedForFermentationStatus(!isRunning)
-    return Promise((resolve, reject) => {
-      resolve(val);
-    })
+
+
+  button.watch(async (err, value) => {
+    if (err) {
+      console.log(err);
+    }
+
+    console.log('Button was pressed.')
+
+    const isFermentationRunning = await queryIsFermentationRunning()
+    console.log(`isFermentationRunning: ${isFermentationRunning}`)
+
+    const buttonEvent = createButtonEvent(isFermentationRunning)
+    console.log(`buttonEvent: ${buttonEvent.title}`)
+
+    const specificGravity = await querySpecificGravityAtTime()
+    console.log(`specificGravity: ${specificGravity}`)
+
+    if (!isFermentationRunning && !specificGravity)
+    {
+      console.log('unable to start fermentation')
+      ledBlink();
+    }
+    else
+    {
+      influxHandler.writeEvent(buttonEvent);
+      (!isFermentationRunning ? ledOn() : ledOff());
+    }
+
   })
 
 
-  .catch(err => {
-    blinkLed();
-    console.log(err);
-  })
-})
-  
-  
-// stop BLE scanning and free GPIO resources on program exit
-process.on('SIGINT', () => {
-  Bleacon.stopScanning();      
-  led.unexport();
-  button.unexport();
-});
+  process.on('SIGINT', () => {
+    Bleacon.stopScanning();
+    led.unexport();
+    button.unexport();
+  });
+
+})();
