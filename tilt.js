@@ -87,8 +87,7 @@ const setInitialLedStatus = async () => {
       ]
 
       const filteredData = data.filter(x => x.value !== null);
-      console.log('Got data');
-      // console.log(filteredData)
+      console.log('Received data');
       db.writeData(filteredData);
     }
   })
@@ -128,7 +127,7 @@ const setInitialLedStatus = async () => {
       }
       else {
         // unable to start fermentation due to invalid specificGravity
-        console.log('Unable to start fermentation');
+        console.log('Unable to start fermentation (no value for specificGravity)');
         ledBlink();
       }
     }
