@@ -2,7 +2,7 @@
 
 const Influx = require('influx');
 const config = require('./config');
-const {measurementArray} = require('./helpers');
+const { measurementArray } = require('./helpers');
 
 
 const influx = new Influx.InfluxDB({
@@ -96,38 +96,24 @@ const queryLastStartTime = async () => {
 
 
 const querySpecificGravity = async (timestamp) => {
-  // TODO: Fix duplicate if-else clauses for return statements (scope issues)
-  if (timestamp)
-  {
-    const foundRows = await influx.query(`
-      SELECT value FROM tilt_red
-      WHERE measured_variable='specific_gravity'
-      AND time <= ${timestamp}
-      ORDER BY time DESC
-      LIMIT 1
-    `)
-    if (foundRows[0]) {
-      return (foundRows[0].value);
-    }
-    else {
-      return false;
-    }
-  }
-  else
-  {
-    const foundRows = await influx.query(`
-      SELECT value FROM tilt_red
-      WHERE measured_variable='specific_gravity'
-      ORDER BY time DESC
-      LIMIT 1
-    `)
-    if (foundRows[0]) {
-      return (foundRows[0].value);
-    }
-    else {
-      return false;
-    }
-  }
+  const withTimestamp = (`
+    SELECT value FROM tilt_red
+    WHERE measured_variable='specific_gravity'
+    AND time <= ${timestamp}
+    ORDER BY time DESC
+    LIMIT 1
+  `)
+
+  const withoutTimestamp = (`
+    SELECT value FROM tilt_red
+    WHERE measured_variable='specific_gravity'
+    ORDER BY time DESC
+    LIMIT 1
+  `)
+
+  const queryString = timestamp ? withTimestamp : withoutTimestamp;
+  const foundRows = await influx.query(queryString);
+  return foundRows[0] ? foundRows[0].value : false;
 }
 
 
