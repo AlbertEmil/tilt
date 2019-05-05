@@ -4,127 +4,27 @@ const Bleacon = require('bleacon');
 const Gpio = require('onoff').Gpio;
 
 const config = require('./config');
-// TODO: Merge beaconParser and calculations since they depent on each other
-const tiltParser = require('./beaconParser');
-const calc = require('./calculations');
-const influxHandler = require('./influxHandler');
+const dataParser = require('./dataParser');
+const db = require('./influxHandler');
+const {buttonEvent} = require('./helpers');
 
-// TODO: Summarize/refactor all GPIO related calls in own module ?
+
 const button = new Gpio(config.BUTTON_PIN, 'in', 'rising', { debounceTimeout: config.BUTTON_DEBOUNCE_MS });
 const led = new Gpio(config.LED_PIN, 'out');
 
-
 let specificGravityAtStart = null;
-// TODO: Remove after influx queries are fully merged to influxHandler
-const influx = influxHandler.influx;
-
-
-const prepareDatabase = async () => {
-  const databaseNames = await influx.getDatabaseNames()
-  if (!databaseNames.includes(config.DATABASE_NAME)) {
-    influx.createDatabase(config.DATABASE_NAME)
-  }
-}
-
-
-const queryIsFermentationRunning = async () => {
-  const foundRows = await influx.query(`
-    SELECT * FROM events
-    ORDER BY time DESC
-    LIMIT 1
-  `)
-
-  if (foundRows[0]) {
-    const timestamp = foundRows[0].time.getNanoTime();
-    return (foundRows[0].tags.split(',').includes("start") ? true : false);
-  }
-  else {
-    return false;
-  }
-}
-
-
-const queryLastStartTime = async () => {
-  const foundRows = await influx.query(`
-    SELECT time,tags FROM events
-    WHERE tags =~ /start/
-    ORDER BY time DESC
-    LIMIT 1
-  `)
-
-  if (foundRows[0]) {
-    return (foundRows[0].time.getNanoTime());
-  }
-  else {
-    return false;
-  }
-}
-
-
-const querySpecificGravity = async (timestamp) => {
-  // TODO: Fix duplicate if-else clauses for return statements (scope issues)
-  if (timestamp)
-  {
-    const foundRows = await influx.query(`
-      SELECT value FROM tilt_red
-      WHERE measured_variable='specific_gravity'
-      AND time <= ${timestamp}
-      ORDER BY time DESC
-      LIMIT 1
-    `)
-    if (foundRows[0]) {
-      return (foundRows[0].value);
-    }
-    else {
-      return false;
-    }
-  }
-  else
-  {
-    const foundRows = await influx.query(`
-      SELECT value FROM tilt_red
-      WHERE measured_variable='specific_gravity'
-      ORDER BY time DESC
-      LIMIT 1
-    `)
-    if (foundRows[0]) {
-      return (foundRows[0].value);
-    }
-    else {
-      return false;
-    }
-  }
-}
-
-// TODO: Refactor this function to other module ?
-const createButtonEvent = (isRunning) => {
-  const startEvent = {
-    title: "Fermentation started",
-    text: "Button was pressed",
-    tags: ["button", "fermentation", "start"],
-  }
-  const stopEvent = {
-    title: "Fermentation stopped",
-    text: "Button was pressed",
-    tags: ["button", "fermentation", "stop"],
-  }
-  return (isRunning) ? stopEvent : startEvent;
-}
 
 
 const ledOn = () => led.writeSync(1)
-
-
 const ledOff = () => led.writeSync(0)
-
 
 // (https://github.com/fivdi/onoff#blink-an-led-using-the-synchronous-api)
 const ledBlink = (interval=config.LED_BLINK_INTERVAL_MS, duration=config.LED_BLINK_DURATION_MS) => {
-  const blinkInterval = setInterval(() => {
+  const blinkInterval = setInterval( () => {
     led.writeSync(led.readSync() === 0 ? 1 : 0);
-  }, interval)
+  }, interval);
 
-  setTimeout(() => {
+  setTimeout( () => {
     clearInterval(blinkInterval);
     ledOff();
   }, duration);
@@ -132,16 +32,16 @@ const ledBlink = (interval=config.LED_BLINK_INTERVAL_MS, duration=config.LED_BLI
 
 
 const setInitialLedStatus = async () => {
-  const isFermentationRunning = await queryIsFermentationRunning()
-  console.log(`isFermentationRunning: ${isFermentationRunning}`)
+  const isFermentationRunning = await db.queryIsFermentationRunning();
+  console.log(`isFermentationRunning: ${isFermentationRunning}`);
   if (!isFermentationRunning) return false;
 
-  const startTime = await queryLastStartTime()
-  console.log(`lastStartTime: ${startTime}`)
-  if (!startTime) return false;
+  const timestamp = await db.queryLastStartTime();
+  console.log(`lastStartTime: ${timestamp}`);
+  if (!timestamp) return false;
 
-  const specificGravity = await querySpecificGravity(lastStartTime)
-  console.log(`specificGravity: ${specificGravity}`)
+  const specificGravity = await db.querySpecificGravity(timestamp);
+  console.log(`specificGravity: ${specificGravity}`);
   if (!specificGravity) return false;
   specificGravityAtStart = specificGravity;
 
@@ -151,18 +51,17 @@ const setInitialLedStatus = async () => {
 
 (async () => {
   console.log('Tilt client started');
-  prepareDatabase();
+  db.createDatabase();
   setInitialLedStatus();
-  Bleacon.startScanning()
+  Bleacon.startScanning();
 
 
   Bleacon.on('discover', function (bleacon) {
     if (bleacon.uuid == config.TILT_RED_UUID) {
-      const timestamp = Date.now()
-      const temperature = tiltParser.temperatureCelsius(bleacon)
-      const specificGravity = tiltParser.specificGravity(bleacon);
-      const alcoholByVolume = calc.alcoholByVolume(specificGravityAtStart, specificGravity);
-      const alcoholByMass = calc.alcoholByMass(alcoholByVolume);
+      const temperature = dataParser.temperatureCelsius(bleacon);
+      const specificGravity = dataParser.specificGravity(bleacon);
+      const alcoholByVolume = dataParser.alcoholByVolume(specificGravityAtStart, specificGravity);
+      const alcoholByMass = dataParser.alcoholByMass(alcoholByVolume);
 
       const data = [
         {
@@ -187,12 +86,10 @@ const setInitialLedStatus = async () => {
         }
       ]
 
-      const filteredData = data.filter(x => x.value !== null)
-      console.log('Got data')
+      const filteredData = data.filter(x => x.value !== null);
+      console.log('Got data');
       // console.log(filteredData)
-
-      influxHandler.writeData(filteredData);
-
+      db.writeData(filteredData);
     }
   })
 
@@ -202,31 +99,31 @@ const setInitialLedStatus = async () => {
       console.log(err);
     }
 
-    console.log('Button was pressed.')
+    console.log('Button was pressed.');
 
-    const isFermentationRunning = await queryIsFermentationRunning()
-    console.log(`isFermentationRunning: ${isFermentationRunning}`)
+    const isFermentationRunning = await db.queryIsFermentationRunning();
+    console.log(`isFermentationRunning: ${isFermentationRunning}`);
 
-    const buttonEvent = createButtonEvent(isFermentationRunning)
-    console.log(`buttonEvent: ${buttonEvent.title}`)
-
-    const specificGravity = await querySpecificGravity()
-    console.log(`specificGravity: ${specificGravity}`)
+    const event = buttonEvent(isFermentationRunning);
+    console.log(`buttonEvent (${event.title})`);
 
     if (isFermentationRunning)
     {
       // fermentation should be stopped
-      influxHandler.writeEvent(buttonEvent);
+      db.writeEvent(event);
       ledOff();
     }
     else
     {
       // fermentation should be started
+      const specificGravity = await db.querySpecificGravity();
+      console.log(`specificGravity: ${specificGravity}`);
+
       if (specificGravity)
       {
         // start fermentation if specificGravity is valid
         specificGravityAtStart = specificGravity;
-        influxHandler.writeEvent(buttonEvent);
+        db.writeEvent(event);
         ledOn();
       }
       else {
