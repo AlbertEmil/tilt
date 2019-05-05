@@ -18,8 +18,8 @@ let specificGravityAtStart = null;
 const ledOn = () => led.writeSync(1)
 const ledOff = () => led.writeSync(0)
 
-// (https://github.com/fivdi/onoff#blink-an-led-using-the-synchronous-api)
 const ledBlink = (interval=config.LED_BLINK_INTERVAL_MS, duration=config.LED_BLINK_DURATION_MS) => {
+  // (https://github.com/fivdi/onoff#blink-an-led-using-the-synchronous-api)
   const blinkInterval = setInterval( () => {
     led.writeSync(led.readSync() === 0 ? 1 : 0);
   }, interval);

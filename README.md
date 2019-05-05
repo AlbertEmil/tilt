@@ -9,11 +9,11 @@ Log data from a [TILT Hydrometer](https://tilthydrometer.com/) to an [InfluxDB](
         |     Tilt      | --------> | NodeJS client | <-------> |   InfluxDB    | --------> |    Grafana    |
         |               |           |               |           |               |           |               |
         +---------------+           +---------------+           +---------------+           +---------------+
-                                            ʌ                                                         
-                                            |                                                        
-                                            |      
+                                            ʌ
                                             |
-                                            v       
+                                            |
+                                            |
+                                            v
                                     +---------------+
                                     |               |
                                     | Button & LED  |
@@ -67,20 +67,20 @@ For a small introduction read [Getting started with InfluxDB](https://docs.influ
         sudo apt-get update  sudo apt-get install oracle-java8-jdk
 
 1. Add repository key for InfluxDB's repository:
-        
+
         curl -sL https://repos.influxdata.com/influxdb.key | sudo apt-key add -
 
 1. Add reposiotry to list of available repositories:
-        
+
         echo "deb https://repos.influxdata.com/debian stretch stable" | sudo tee /etc/apt/sources.list.d/influxdb.list
 
 1. Update repository data and installl influxdb from repository
-        
+
         sudo apt update
         sudo apt install influxdb
 
 1. Enable influxdb service to run after start-up and start service:
-        
+
         sudo systemctl enable influxdb
         sudo systemctl start influxdb
 
@@ -121,7 +121,7 @@ For a small introduction read [Getting started with InfluxDB](https://docs.influ
 1. Restart influxdb service to reload edited config file:
 
         sudo systemctl restart influxdb
- 
+
 
 ## Grafana
 A look into [Grafana's documentation](https://grafana.com/grafana), tells us:
@@ -140,12 +140,12 @@ With Grafana it is easy to set-up a very versatile and flexible data monitoring 
 1. Determine latest relase from [Grafana's download page for ARM architecture](https://grafana.com/grafana/download?platform=arm), download file and install:
 
         wget https://dl.grafana.com/oss/release/grafana_5.4.3_armhf.deb
-        sudo dpkg -i grafana_5.4.3_armhf.deb 
+        sudo dpkg -i grafana_5.4.3_armhf.deb
 
     There might be additional dependencies needed. To fulfill these, follow on-screen instruction to install and fix missing dependencies. When done, retry to install `.deb` file by re-running the second command given above.
 
 1. Enable grafana-server service to run after start-up and start service:
-        
+
         sudo systemctl enable grafana-server
         sudo systemctl start grafana-server
 
@@ -209,7 +209,7 @@ after you downloaded or cloned all the files from the project's repository into 
 In order to execute [`tilt.js`](tilt.js) automatically after the system is booted, a [`systemd`](https://en.wikipedia.org/wiki/Systemd) service file is provided. If you want to use the service, follow these steps:
 
 1. Copy the `.service` file to the appropriate location:
-        
+
         sudo cp ~/tilt/tilt.service /etc/systemd/system
 
 1. Enable the service to systemd:
@@ -217,11 +217,11 @@ In order to execute [`tilt.js`](tilt.js) automatically after the system is boote
         sudo systemctl enable tilt
 
 1. Check the service status to check if it was loaded properly:
-        
+
         sudo systemctl status tilt
 
 1. Start the service manually (if you do not want to reboot the system):
-        
+
         sudo systemctl start tilt
 
 
