@@ -32,15 +32,11 @@ const ledBlink = (interval=config.LED_BLINK_INTERVAL_MS, duration=config.LED_BLI
 
 
 const setInitialLedStatus = async () => {
-  const isFermentationRunning = await db.queryIsFermentationRunning();
-  console.log(`isFermentationRunning: ${isFermentationRunning}`);
-  if (!isFermentationRunning) return false;
+  const lastStartTime = await db.queryLastStartTime();
+  console.log(`isFermentationRunning: ${Boolean(lastStartTime)}  ${lastStartTime ? lastStartTime : ''}`);
+  if (!lastStartTime) return false;
 
-  const timestamp = await db.queryLastStartTime();
-  console.log(`lastStartTime: ${timestamp}`);
-  if (!timestamp) return false;
-
-  const specificGravity = await db.querySpecificGravity(timestamp);
+  const specificGravity = await db.querySpecificGravity(lastStartTime);
   console.log(`specificGravity: ${specificGravity}`);
   if (!specificGravity) return false;
   specificGravityAtStart = specificGravity;
@@ -100,13 +96,13 @@ const setInitialLedStatus = async () => {
 
     console.log('Button was pressed.');
 
-    const isFermentationRunning = await db.queryIsFermentationRunning();
-    console.log(`isFermentationRunning: ${isFermentationRunning}`);
+    const lastStartTime = await db.queryLastStartTime();
+    console.log(`isFermentationRunning: ${Boolean(lastStartTime)}  ${lastStartTime ? lastStartTime : ''}`);
 
-    const event = buttonEvent(isFermentationRunning);
+    const event = buttonEvent(lastStartTime);
     console.log(`buttonEvent (${event.title})`);
 
-    if (isFermentationRunning)
+    if (lastStartTime)
     {
       // fermentation should be stopped
       db.writeEvent(event);
@@ -127,7 +123,7 @@ const setInitialLedStatus = async () => {
       }
       else {
         // unable to start fermentation due to invalid specificGravity
-        console.log('Unable to start fermentation (no value for specificGravity)');
+        console.log('Unable to start fermentation (no value for `specificGravity`)');
         ledBlink();
       }
     }

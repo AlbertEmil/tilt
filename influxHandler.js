@@ -61,7 +61,7 @@ const writeEvent = async (event) => {
 }
 
 
-const queryIsFermentationRunning = async () => {
+const queryLastStartTime = async () => {
   const foundRows = await influx.query(`
     SELECT * FROM events
     ORDER BY time DESC
@@ -70,24 +70,7 @@ const queryIsFermentationRunning = async () => {
 
   if (foundRows[0]) {
     const timestamp = foundRows[0].time.getNanoTime();
-    return (foundRows[0].tags.split(',').includes("start") ? true : false);
-  }
-  else {
-    return false;
-  }
-}
-
-
-const queryLastStartTime = async () => {
-  const foundRows = await influx.query(`
-    SELECT time,tags FROM events
-    WHERE tags =~ /start/
-    ORDER BY time DESC
-    LIMIT 1
-  `)
-
-  if (foundRows[0]) {
-    return (foundRows[0].time.getNanoTime());
+    return (foundRows[0].tags.split(',').includes("start") ? timestamp : false);
   }
   else {
     return false;
@@ -120,6 +103,5 @@ const querySpecificGravity = async (timestamp) => {
 module.exports.createDatabase = createDatabase;
 module.exports.writeData = writeData;
 module.exports.writeEvent = writeEvent;
-module.exports.queryIsFermentationRunning = queryIsFermentationRunning;
 module.exports.queryLastStartTime = queryLastStartTime;
 module.exports.querySpecificGravity = querySpecificGravity;
