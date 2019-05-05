@@ -1,6 +1,5 @@
 "use strict";
 
-
 module.exports.temperatureCelsius = (bleacon) => {
   return (bleacon.major - 32) / 1.8;
 }

@@ -1,7 +1,6 @@
 "use strict";
 
-
-const buttonEvent = (isRunning) => {
+module.exports.buttonEvent = (isRunning) => {
   const startEvent = {
     title: "Fermentation started",
     text: "Button was pressed",
@@ -16,7 +15,7 @@ const buttonEvent = (isRunning) => {
 }
 
 
-const measurementArray = (singleReading) => {
+module.exports.measurementArray = (singleReading) => {
   return {
     fields: {
       value: singleReading.value,
@@ -27,6 +26,3 @@ const measurementArray = (singleReading) => {
     }
   }
 }
-
-module.exports.buttonEvent = buttonEvent;
-module.exports.measurementArray = measurementArray;
