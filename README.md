@@ -1,3 +1,11 @@
+<i>
+Remark:
+
+This project needs to be revamped due to several architectural design issues. However, there is another version of this project exporting data into csv files which is recommended to be used. You can find the csv-based version in my [`tiltCsv` repo](https://github.com/AlbertEmil/tiltCsv).
+        
+</i>        
+
+
 # TILT Hydrometer @ Carl-Wilhelms-Bräu
 
 Log data from a [TILT Hydrometer](https://tilthydrometer.com/) to an [InfluxDB](https://www.influxdata.com/) using a Raspberry Pi 3 B+. To handle data a [NodeJS](https://nodejs.org/en/) client built on-top of [influx](https://node-influx.github.io/) and [node-bleacon](https://github.com/sandeepmistry/node-bleacon) is used. The GIPOs for a user push button and a LED are accessed with [onoff](https://github.com/fivdi/onoff). For data visualization the open source monitoring platform [Grafana](https://grafana.com/) comes into play.
